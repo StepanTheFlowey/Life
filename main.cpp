@@ -187,27 +187,52 @@ protected:
 };
 Map* map = nullptr;
 
-std::atomic_bool work = true;
-std::atomic_bool pause = true;
-std::mutex mutex;
-void mapUpdater() {
-  sf::Clock clock;
+class MapUpdater {
+public:
 
-  while(work) {
-    if(clock.getElapsedTime().asMilliseconds() > 100) {
-      clock.restart();
+  std::atomic_bool pause = true;
 
-      if(!pause) {
-        if(mutex.try_lock()) {
-          map->update();
-          mutex.unlock();
+  MapUpdater() :thread_(&MapUpdater::worker, this) {}
+
+  ~MapUpdater() {
+    work_ = false;
+    thread_.join();
+  }
+
+  void lock() {
+    mutex_.lock();
+  }
+
+  void unlock() {
+    mutex_.unlock();
+  }
+protected:
+
+  void worker() {
+    sf::Clock clock;
+
+    while(work_) {
+      if(clock.getElapsedTime().asMilliseconds() > 100) {
+        clock.restart();
+
+        if(!pause) {
+          if(mutex_.try_lock()) {
+            map->update();
+            mutex_.unlock();
+          }
         }
-      }
 
-      sf::sleep(sf::milliseconds(5));
+        sf::sleep(sf::milliseconds(5));
+      }
     }
   }
-}
+
+
+  std::atomic_bool work_ = true;
+  std::mutex mutex_;
+  std::thread thread_;
+};
+MapUpdater* mapUpdater = nullptr;
 
 #if DEBUG
 int main() {
@@ -219,15 +244,14 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
   const sf::VideoMode fullVidoeMode = sf::VideoMode::getDesktopMode();
 
   map = new Map(Map::Size(500, 500));
-
-  std::thread mapUpdaterThread(&mapUpdater);
+  mapUpdater = new MapUpdater;
 
   sf::Cursor cursor;
   cursor.loadFromSystem(sf::Cursor::Cross);
 
   sf::View view;
-  view.setSize(80.F, 60.F);
-  view.setCenter(0, 0);
+  view.setSize(sf::Vector2f(80.F, 60.F));
+  view.setCenter(sf::Vector2f(0.F, 0.F));
 
   sf::Event event;
 
@@ -253,9 +277,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
 
     window.clear(sf::Color::Green);
     window.setView(view);
-    mutex.lock();
+    mapUpdater->lock();
     window.draw(*map);
-    mutex.unlock();
+    mapUpdater->unlock();
     window.display();
 
     while(window.pollEvent(event)) {
@@ -285,26 +309,26 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
           break;
 
           case sf::Keyboard::P:
-          pause = !pause;
+          mapUpdater->pause = !mapUpdater->pause;
           break;
 
           case sf::Keyboard::C:
-          mutex.lock();
+          mapUpdater->lock();
           map->clear();
-          mutex.unlock();
+          mapUpdater->unlock();
           break;
 
           case sf::Keyboard::R:
-          mutex.lock();
+          mapUpdater->lock();
           map->randomize();
-          mutex.unlock();
+          mapUpdater->unlock();
           break;
 
           case sf::Keyboard::Enter:
-          if(pause) {
-            mutex.lock();
+          if(mapUpdater->pause) {
+            mapUpdater->lock();
             map->update();
-            mutex.unlock();
+            mapUpdater->unlock();
           }
           break;
         }
@@ -313,9 +337,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
         case sf::Event::MouseButtonPressed:
         switch(event.mouseButton.button) {
           case sf::Mouse::Left:
-          mutex.lock();
+          mapUpdater->lock();
           map->invert(window.mapPixelToCoords(sf::Mouse::getPosition(window), view));
-          mutex.unlock();
+          mapUpdater->unlock();
           break;
 
           case sf::Mouse::Right:
@@ -327,8 +351,6 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
     }
   }
 
-  work = false;
-  mapUpdaterThread.join();
-
+  delete mapUpdater;
   delete map;
 }
