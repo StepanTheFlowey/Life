@@ -1,6 +1,9 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 
+#include <atomic>
+#include <mutex>
+#include <thread>
 #include <vector>
 #include <iostream>
 #include <Windows.h>
@@ -10,40 +13,25 @@
 class Map : public sf::Drawable {
 public:
 
+  using Size = sf::Vector2<uintptr_t>;
   struct Cell {
     bool now = false;
     bool next = false;
   };
 
-  Map(uintptr_t w, uintptr_t h) {
-    if(w > (UINT32_MAX / 2 - 1) || h > (UINT32_MAX / 2 - 1)) {
-      throw std::out_of_range("Map size too big");
-    }
-
-    size_.x = w;
-    size_.y = h;
-
+  Map() {
     vtBuff_.setPrimitiveType(sf::Quads);
     vtBuff_.setUsage(sf::VertexBuffer::Stream);
-    vtBuff_.create(w * h * 4);
-    vts_.resize(w * h * 4);
-    map_.resize(w * h);
-
-    uintptr_t index;
-    for(uintptr_t i = 0; i < size_.x; ++i) {
-      for(uintptr_t j = 0; j < size_.y; ++j) {
-        index = (i + j * size_.x) * 4;
-
-        sf::Vector2f pos(i, j);
-        vts_[index + 0].position = pos + sf::Vector2f(0.F, 0.F);
-        vts_[index + 1].position = pos + sf::Vector2f(0.F, 1.F);
-        vts_[index + 2].position = pos + sf::Vector2f(1.F, 1.F);
-        vts_[index + 3].position = pos + sf::Vector2f(1.F, 0.F);
-      }
-    }
-
-    update();
   }
+
+  Map(const Size& size) {
+    vtBuff_.setPrimitiveType(sf::Quads);
+    vtBuff_.setUsage(sf::VertexBuffer::Stream);
+
+    setSize(size);
+  }
+
+  ~Map() = default;
 
   Cell& get(intptr_t x, intptr_t y) {
     if(x < 0) {
@@ -78,8 +66,8 @@ public:
   }
 
   void invert(const sf::Vector2f& vec) {
-    intptr_t x = floorf(vec.x);
-    intptr_t y = floorf(vec.y);
+    const intptr_t x = floorf(vec.x);
+    const intptr_t y = floorf(vec.y);
     if(x > size_.x - 1 || x < 0 || y > size_.y - 1 || y < 0) {
       return;
     }
@@ -87,6 +75,33 @@ public:
     Cell& cell = get(x, y);
     cell.now = !cell.now;
     cell.next = cell.now;
+
+    updateRenderer();
+  }
+
+  Size getSize() const {
+    return size_;
+  }
+
+  void setSize(const Size& size) {
+    size_ = size;
+
+    vtBuff_.create(size_.x * size_.y * 4);
+    vts_.resize(size_.x * size_.y * 4);
+    map_.resize(size_.x * size_.y);
+
+    uintptr_t index;
+    for(uintptr_t i = 0; i < size_.x; ++i) {
+      for(uintptr_t j = 0; j < size_.y; ++j) {
+        index = (i + j * size_.x) * 4;
+
+        sf::Vector2f pos(i, j);
+        vts_[index + 0].position = pos + sf::Vector2f(0.F, 0.F);
+        vts_[index + 1].position = pos + sf::Vector2f(0.F, 1.F);
+        vts_[index + 2].position = pos + sf::Vector2f(1.F, 1.F);
+        vts_[index + 3].position = pos + sf::Vector2f(1.F, 0.F);
+      }
+    }
 
     update();
   }
@@ -96,6 +111,8 @@ public:
       i.now = false;
       i.next = false;
     }
+
+    updateRenderer();
   }
 
   void randomize() {
@@ -103,6 +120,8 @@ public:
       i.now = rand() % 2;
       i.next = i.now;
     }
+
+    updateRenderer();
   }
 
   void update() {
@@ -134,6 +153,10 @@ public:
       i.now = i.next;
     }
 
+    updateRenderer();
+  }
+
+  void updateRenderer() {
     uintptr_t indexS;
     uintptr_t index;
     for(uintptr_t i = 0; i < size_.x; ++i) {
@@ -141,7 +164,7 @@ public:
         indexS = i + j * size_.x;
         index = indexS * 4;
 
-        sf::Color color = map_[indexS].now ? sf::Color::White : sf::Color::Black;
+        const sf::Color& color = map_[indexS].now ? sf::Color::White : sf::Color::Black;
         vts_[index + 0].color = color;
         vts_[index + 1].color = color;
         vts_[index + 2].color = color;
@@ -160,8 +183,31 @@ protected:
   std::vector<Cell> map_;
   std::vector<sf::Vertex> vts_;
   sf::VertexBuffer vtBuff_;
-  sf::Vector2<uintptr_t> size_;
+  Size size_;
 };
+Map* map = nullptr;
+
+std::atomic_bool work = true;
+std::atomic_bool pause = true;
+std::mutex mutex;
+void mapUpdater() {
+  sf::Clock clock;
+
+  while(work) {
+    if(clock.getElapsedTime().asMilliseconds() > 100) {
+      clock.restart();
+
+      if(!pause) {
+        if(mutex.try_lock()) {
+          map->update();
+          mutex.unlock();
+        }
+      }
+
+      sf::sleep(sf::milliseconds(5));
+    }
+  }
+}
 
 #if DEBUG
 int main() {
@@ -172,7 +218,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
   const sf::VideoMode basicVideoMode(800, 600);
   const sf::VideoMode fullVidoeMode = sf::VideoMode::getDesktopMode();
 
-  Map map(200, 200);
+  map = new Map(Map::Size(500, 500));
+
+  std::thread mapUpdaterThread(&mapUpdater);
 
   sf::Cursor cursor;
   cursor.loadFromSystem(sf::Cursor::Cross);
@@ -189,9 +237,6 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
   window.setMouseCursor(cursor);
 
   bool fullscr = false;
-  bool pause = true;
-
-  sf::Clock clock;
   while(window.isOpen()) {
     if(sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
       view.move(0, -1);
@@ -206,16 +251,11 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
       view.move(-1, 0);
     }
 
-    if(clock.getElapsedTime().asMilliseconds() > 50) {
-      clock.restart();
-      if(!pause) {
-        map.update();
-      }
-    }
-
     window.clear(sf::Color::Green);
     window.setView(view);
-    window.draw(map);
+    mutex.lock();
+    window.draw(*map);
+    mutex.unlock();
     window.display();
 
     while(window.pollEvent(event)) {
@@ -244,31 +284,38 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
           }
           break;
 
-          case sf::Keyboard::R:
-          pause = false;
-          break;
-
           case sf::Keyboard::P:
-          pause = true;
+          pause = !pause;
           break;
 
           case sf::Keyboard::C:
-          map.clear();
+          mutex.lock();
+          map->clear();
+          mutex.unlock();
           break;
 
-          case sf::Keyboard::G:
-          map.randomize();
+          case sf::Keyboard::R:
+          mutex.lock();
+          map->randomize();
+          mutex.unlock();
           break;
 
           case sf::Keyboard::Enter:
-          map.update();
+          if(pause) {
+            mutex.lock();
+            map->update();
+            mutex.unlock();
+          }
           break;
         }
         break;
+
         case sf::Event::MouseButtonPressed:
         switch(event.mouseButton.button) {
           case sf::Mouse::Left:
-          map.invert(window.mapPixelToCoords(sf::Mouse::getPosition(window), view));
+          mutex.lock();
+          map->invert(window.mapPixelToCoords(sf::Mouse::getPosition(window), view));
+          mutex.unlock();
           break;
 
           case sf::Mouse::Right:
@@ -279,4 +326,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
       }
     }
   }
+
+  work = false;
+  mapUpdaterThread.join();
+
+  delete map;
 }
