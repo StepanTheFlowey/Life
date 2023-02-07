@@ -13,7 +13,7 @@
 class Map : public sf::Drawable {
 public:
 
-  using Size = sf::Vector2<uintptr_t>;
+  using Size = sf::Vector2<intptr_t>;
   struct Cell {
     bool now = false;
     bool next = false;
@@ -66,9 +66,10 @@ public:
   }
 
   void invert(const sf::Vector2f& vec) {
-    const intptr_t x = floorf(vec.x);
-    const intptr_t y = floorf(vec.y);
-    if(x > size_.x - 1 || x < 0 || y > size_.y - 1 || y < 0) {
+    const intptr_t x = static_cast<intptr_t>(floorf(vec.x));
+    const intptr_t y = static_cast<intptr_t>(floorf(vec.y));
+    if(x > size_.x - 1 || x < 0 ||
+       y > size_.y - 1 || y < 0) {
       return;
     }
 
@@ -90,12 +91,13 @@ public:
     vts_.resize(size_.x * size_.y * 4);
     map_.resize(size_.x * size_.y);
 
-    uintptr_t index;
-    for(uintptr_t i = 0; i < size_.x; ++i) {
-      for(uintptr_t j = 0; j < size_.y; ++j) {
+    intptr_t index;
+    for(intptr_t i = 0; i < size_.x; ++i) {
+      for(intptr_t j = 0; j < size_.y; ++j) {
         index = (i + j * size_.x) * 4;
 
-        sf::Vector2f pos(i, j);
+        sf::Vector2f pos(static_cast<float>(i),
+                         static_cast<float>(j));
         vts_[index + 0].position = pos + sf::Vector2f(0.F, 0.F);
         vts_[index + 1].position = pos + sf::Vector2f(0.F, 1.F);
         vts_[index + 2].position = pos + sf::Vector2f(1.F, 1.F);
@@ -157,10 +159,10 @@ public:
   }
 
   void updateRenderer() {
-    uintptr_t indexS;
-    uintptr_t index;
-    for(uintptr_t i = 0; i < size_.x; ++i) {
-      for(uintptr_t j = 0; j < size_.y; ++j) {
+    intptr_t indexS;
+    intptr_t index;
+    for(intptr_t i = 0; i < size_.x; ++i) {
+      for(intptr_t j = 0; j < size_.y; ++j) {
         indexS = i + j * size_.x;
         index = indexS * 4;
 
@@ -297,14 +299,14 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
             window.setMouseCursor(cursor);
             window.setKeyRepeatEnabled(false);
             window.setVerticalSyncEnabled(true);
-            view.setSize(fullVidoeMode.width / 10, fullVidoeMode.height / 10);
+            view.setSize(sf::Vector2f(fullVidoeMode.width / 10.F, fullVidoeMode.height / 10.F));
           }
           else {
             window.create(basicVideoMode, "Life", sf::Style::Close);
             window.setMouseCursor(cursor);
             window.setKeyRepeatEnabled(false);
             window.setVerticalSyncEnabled(true);
-            view.setSize(800 / 10, 600 / 10);
+            view.setSize(sf::Vector2f(80.F, 60.F));
           }
           break;
 
