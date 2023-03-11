@@ -287,68 +287,68 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmd
     while(window.pollEvent(event)) {
       switch(event.type) {
         case sf::Event::Closed:
-        window.close();
-        break;
+          window.close();
+          break;
 
         case sf::Event::KeyPressed:
-        switch(event.key.code) {
-          case sf::Keyboard::F11:
-          fullscr = !fullscr;
-          if(fullscr) {
-            window.create(fullVidoeMode, "Life", sf::Style::Fullscreen);
-            window.setMouseCursor(cursor);
-            window.setKeyRepeatEnabled(false);
-            window.setVerticalSyncEnabled(true);
-            view.setSize(sf::Vector2f(fullVidoeMode.width / 10.F, fullVidoeMode.height / 10.F));
+          switch(event.key.code) {
+            case sf::Keyboard::F11:
+              fullscr = !fullscr;
+              if(fullscr) {
+                window.create(fullVidoeMode, "Life", sf::Style::Fullscreen);
+                window.setMouseCursor(cursor);
+                window.setKeyRepeatEnabled(false);
+                window.setVerticalSyncEnabled(true);
+                view.setSize(sf::Vector2f(fullVidoeMode.width / 10.F, fullVidoeMode.height / 10.F));
+              }
+              else {
+                window.create(basicVideoMode, "Life", sf::Style::Close);
+                window.setMouseCursor(cursor);
+                window.setKeyRepeatEnabled(false);
+                window.setVerticalSyncEnabled(true);
+                view.setSize(sf::Vector2f(80.F, 60.F));
+              }
+              break;
+
+            case sf::Keyboard::P:
+              mapUpdater->pause = !mapUpdater->pause;
+              break;
+
+            case sf::Keyboard::C:
+              mapUpdater->lock();
+              map->clear();
+              mapUpdater->unlock();
+              break;
+
+            case sf::Keyboard::R:
+              mapUpdater->lock();
+              map->randomize();
+              mapUpdater->unlock();
+              break;
+
+            case sf::Keyboard::Enter:
+              if(mapUpdater->pause) {
+                mapUpdater->lock();
+                map->update();
+                mapUpdater->unlock();
+              }
+              break;
           }
-          else {
-            window.create(basicVideoMode, "Life", sf::Style::Close);
-            window.setMouseCursor(cursor);
-            window.setKeyRepeatEnabled(false);
-            window.setVerticalSyncEnabled(true);
-            view.setSize(sf::Vector2f(80.F, 60.F));
-          }
           break;
-
-          case sf::Keyboard::P:
-          mapUpdater->pause = !mapUpdater->pause;
-          break;
-
-          case sf::Keyboard::C:
-          mapUpdater->lock();
-          map->clear();
-          mapUpdater->unlock();
-          break;
-
-          case sf::Keyboard::R:
-          mapUpdater->lock();
-          map->randomize();
-          mapUpdater->unlock();
-          break;
-
-          case sf::Keyboard::Enter:
-          if(mapUpdater->pause) {
-            mapUpdater->lock();
-            map->update();
-            mapUpdater->unlock();
-          }
-          break;
-        }
-        break;
 
         case sf::Event::MouseButtonPressed:
-        switch(event.mouseButton.button) {
-          case sf::Mouse::Left:
-          mapUpdater->lock();
-          map->invert(window.mapPixelToCoords(sf::Mouse::getPosition(window), view));
-          mapUpdater->unlock();
-          break;
+          switch(event.mouseButton.button) {
+            case sf::Mouse::Left:
+              mapUpdater->lock();
+              map->invert(window.mapPixelToCoords(sf::Mouse::getPosition(window), view));
+              mapUpdater->unlock();
+              break;
 
-          case sf::Mouse::Right:
-          view.setCenter(window.mapPixelToCoords(sf::Mouse::getPosition(window), view));
+            case sf::Mouse::Right:
+              view.setCenter(window.mapPixelToCoords(sf::Mouse::getPosition(window), view));
+              break;
+          }
           break;
-        }
-        break;
       }
     }
   }
